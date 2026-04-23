@@ -70,4 +70,11 @@ public class ReservationController {
             );
         }
     }
+
+    @GetMapping("/remaining/{seatId}")
+    public ApiResponse<Long> getRemainingTime(@PathVariable Long seatId,
+                                              @AuthenticationPrincipal String email) {
+        long remaining = reservationService.getRemainingTime(seatId, email);
+        return ApiResponse.success(remaining);
+    }
 }

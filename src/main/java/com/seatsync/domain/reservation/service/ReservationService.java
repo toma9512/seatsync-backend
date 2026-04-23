@@ -13,6 +13,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -47,6 +48,19 @@ public class ReservationService {
         }
 
         seat.updateStatus("PENDING");
+
+        // DB에 PENDING 상태로 예약 저장
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+
+        Reservation reservation = Reservation.builder()
+                .user(user)
+                .seat(seat)
+                .status("PENDING")
+                .expiresAt(LocalDateTime.now().plusMinutes(PENDING_TTL))
+                .build();
+
+        reservationRepository.save(reservation);
     }
 
     @Transactional
@@ -71,19 +85,20 @@ public class ReservationService {
         redisTemplate.delete(key);
         seat.updateStatus("RESERVED");
 
-        Reservation reservation = Reservation.builder()
-                .user(user)
-                .seat(seat)
-                .status("CONFIRMED")
-                .expiresAt(null)
-                .build();
+        // 기존 PENDING 예약 찾아서 CONFIRMED로 업데이트
+        Reservation reservation = reservationRepository
+                .findPendingReservation(seat.getId(), user.getId())
+                .orElseThrow(() -> new CustomException(ErrorCode.RESERVATION_NOT_FOUND));
 
-        return reservationRepository.save(reservation);
+        reservation.updateStatus("CONFIRMED");
+        reservation.clearExpiresAt();
+
+        return reservation;
     }
 
     @Transactional
     public void cancelReservation(Long reservationId, String email) {
-        Reservation reservation = reservationRepository.findById(reservationId)
+        Reservation reservation = reservationRepository.findByIdWithSeatAndUser(reservationId)
                 .orElseThrow(() -> new CustomException(ErrorCode.RESERVATION_NOT_FOUND));
 
         if (!reservation.getUser().getEmail().equals(email)) {
@@ -99,5 +114,16 @@ public class ReservationService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
         return reservationRepository.findByUserId(user.getId());
+    }
+
+    public long getRemainingTime(Long seatId, String email) {
+        String key = SEAT_PENDING_KEY + seatId;
+        Long remainingSeconds = redisTemplate.getExpire(key, TimeUnit.SECONDS);
+
+        if (remainingSeconds == null || remainingSeconds < 0) {
+            throw new CustomException(ErrorCode.RESERVATION_EXPIRED);
+        }
+
+        return remainingSeconds;
     }
 }

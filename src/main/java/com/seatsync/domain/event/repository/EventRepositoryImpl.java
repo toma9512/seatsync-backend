@@ -31,14 +31,14 @@ public class EventRepositoryImpl implements EventRepositoryCustom {
     }
 
     private BooleanExpression genreEq(String genre) {
-        return genre != null ? QEvent.event.genre.eq(genre) : null;
+        return (genre != null && !genre.isEmpty()) ? QEvent.event.genre.eq(genre) : null;
     }
 
     private BooleanExpression venueContains(String venue) {
-        return venue != null ? QEvent.event.venue.contains(venue) : null;
+        return (venue != null && !venue.isEmpty()) ? QEvent.event.venue.contains(venue) : null;
     }
 
     private BooleanExpression keywordContains(String keyword) {
-        return keyword != null ? QEvent.event.title.contains(keyword) : null;
+        return (keyword != null && !keyword.isEmpty()) ? QEvent.event.title.contains(keyword) : null;
     }
 }
